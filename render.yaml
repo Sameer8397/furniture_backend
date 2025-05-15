@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: furniture-app
-    env: other # optional; can be "other" if not using Docker
-    buildCommand: ./mvnw package
-    startCommand: java -jar target/furniture-0.0.1-SNAPSHOT.jar
-    envVars:
-      - key: PORT
-        value: 8080
