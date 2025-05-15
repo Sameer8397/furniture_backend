@@ -1,5 +1,6 @@
 package com.isha.furniture.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.isha.furniture.model.Product;
 import com.isha.furniture.service.ProductService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,35 +39,54 @@ public class ImageController {
     ) throws IOException {
 
         String uploadDir = "C:\\Users\\gs1-sameerahamedm\\Pictures\\Camera Roll\\uploaded-images\\";
-        String fileName = StringUtils.cleanPath(file.getOriginalFilename());
-        System.out.println("Received file: " + file.getOriginalFilename());
-        System.out.println("Received product1: " + product.getName());
+
+        // Get original file extension
+        String originalFilename = StringUtils.cleanPath(file.getOriginalFilename());
+        String fileExtension = "";
+
+        int dotIndex = originalFilename.lastIndexOf('.');
+        if (dotIndex > 0) {
+            fileExtension = originalFilename.substring(dotIndex);
+        }
+
+        // Generate a unique filename
+        String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
+        Path filePath = Paths.get(uploadDir, uniqueFilename);
+
+        // Ensure the directory exists
         File uploadPath = new File(uploadDir);
         if (!uploadPath.exists()) {
             uploadPath.mkdirs();
         }
 
-        Path filePath = Paths.get(uploadDir, fileName);
+        // Save the file
         Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-        // You can now use product1.getTitle(), product1.getDescription()
-        System.out.println("Image metadata received: Title = " + product.getName() + ", Description = " + product.getDescription());
+        // Log info
+        System.out.println("Received file: " + originalFilename);
+        System.out.println("Stored as: " + uniqueFilename);
+        System.out.println("Received product: " + product.getName());
 
+        // Save to DB with unique file name
+        Product savedProduct = new Product();
+        savedProduct.setName(product.getName());
+        savedProduct.setDescription(product.getDescription());
+        savedProduct.setPrice(product.getPrice());
+        savedProduct.setImageUrl("http://localhost:8080/api/" + uniqueFilename); // or your actual image URL path
+
+        productService.saveProduct(savedProduct);
+
+        // Build response
         Map<String, String> response = new HashMap<>();
-        response.put("url", "/api/images/" + fileName);
-        response.put("title", product.getDescription());
+        response.put("url", "/api/" + uniqueFilename);
+        response.put("originalFilename", originalFilename);
+        response.put("storedFilename", uniqueFilename);
+        response.put("title", product.getName());
         response.put("description", product.getDescription());
 
-        Product product1 = new Product();
-        product1.setDescription(product.getDescription());
-        product1.setImageUrl("http://localhost:8080/api/"+fileName);
-        product1.setName(product.getName());
-        product1.setPrice(product.getPrice());
-
-
-        productService.saveProduct(product1);
         return ResponseEntity.ok(response);
     }
+
 
     @GetMapping("/{filename}")
     public ResponseEntity<Resource> getImage(@PathVariable String filename) throws MalformedURLException {
@@ -84,4 +104,25 @@ public class ImageController {
     public List<Product> getAllProducts() {
         return productService.getAllProducts();
     }
+
+
+    @PutMapping(value = "/updateProduct/{id}", consumes = "multipart/form-data")
+    public ResponseEntity<Product> updateProduct(
+            @PathVariable UUID id,
+            @RequestPart("product") String productJson,
+            @RequestPart(value = "file", required = false) MultipartFile file) {
+
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            Product updatedProduct = objectMapper.readValue(productJson, Product.class);
+
+            Product savedProduct = productService.updateProduct(id, updatedProduct, file);
+            return ResponseEntity.ok(savedProduct);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
 }
